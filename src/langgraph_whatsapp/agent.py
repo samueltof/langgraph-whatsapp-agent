@@ -19,14 +19,14 @@ class Agent:
             LOGGER.error(f"Failed to parse CONFIG as JSON: {e}")
             raise
 
-    async def invoke(self, id: str, user_message: str, media: list = None) -> dict:
+    async def invoke(self, id: str, user_message: str, media: dict = None) -> dict:
         """
         Process a user message through the LangGraph client.
         
         Args:
             id: The unique identifier for the conversation
             user_message: The message content from the user
-            media: List of media files attached to the message
+            media: Dictionary with image media data (url and content_type)
             
         Returns:
             dict: The result from the LangGraph run
@@ -34,9 +34,7 @@ class Agent:
         LOGGER.info(f"Invoking agent with thread_id: {id}, message: {user_message}")
 
         try:
-
             message_content = []
-            
 
             if user_message:
                 message_content.append({
@@ -44,27 +42,19 @@ class Agent:
                     "text": user_message
                 })
 
-            if media and isinstance(media, list):
-                for item in media:
-                    if 'url' in item and 'content_type' in item:
-                        if item['content_type'].startswith('image/'):
-                            message_content.append({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": item['url'],
-                                    "detail": "high"
-                                }
-                            })
-                        else:
-                            media_type = item['content_type'].split('/')[0]  # 'video', 'audio', etc.
-                            message_content.append({
-                                "type": "media",
-                                "media": {
-                                    "type": media_type,
-                                    "url": item['url'],
-                                    "media_type": item['content_type']
-                                }
-                            })
+            if media and isinstance(media, dict) and 'url' in media and 'content_type' in media:
+                if media['content_type'].startswith('image/'):
+                    # Process only images
+                    message_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": media['url'],
+                            "detail": "high"
+                        }
+                    })
+                    LOGGER.info(f"Added image: {media['url']}")
+                else:
+                    LOGGER.warning(f"Ignoring non-image media type: {media['content_type']}")
             
             request_payload = {
                 "thread_id": str(uuid.uuid5(uuid.NAMESPACE_DNS, id)),
@@ -85,6 +75,8 @@ class Agent:
                 "if_not_exists": "create",
                 "stream_mode": "values",
             }
+            
+            LOGGER.debug(f"Request payload: {json.dumps(request_payload, indent=2)}")
             
             async for chunk in self.client.runs.stream(
                 **request_payload

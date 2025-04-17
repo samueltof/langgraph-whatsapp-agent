@@ -4,7 +4,9 @@ from fastapi import Request, HTTPException
 from twilio.request_validator import RequestValidator
 from src.langgraph_whatsapp.config import TWILIO_AUTH_TOKEN
 from abc import ABC, abstractmethod
+import logging
 
+LOGGER = logging.getLogger(__name__)
 
 class WhatsAppAgent(ABC):
     """
@@ -78,34 +80,47 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
         
         # Get media information if available
         num_media = int(form_data.get('NumMedia', "0"))
-        media_urls = []
-        media_content_types = []
         
-        for i in range(num_media):
-            media_url = form_data.get(f'MediaUrl{i}', "")
-            media_content_type = form_data.get(f'MediaContentType{i}', "")
-            if media_url:
-                media_urls.append(media_url)
-                media_content_types.append(media_content_type)
+        # Initialize media as None
+        media = None
+        
+        # If there's at least one media item and it's an image, use only the first one
+        if num_media > 0:
+            media_url = form_data.get('MediaUrl0', "")
+            media_content_type = form_data.get('MediaContentType0', "")
+            
+            if media_url and media_content_type:
+                if media_content_type.startswith('image/'):
+                    # Only process images
+                    media = {
+                        "url": media_url,
+                        "content_type": media_content_type
+                    }
+                    LOGGER.info(f"Found image: {media_url}")
+                else:
+                    LOGGER.warning(f"Ignoring non-image media type: {media_content_type}")
+                
+                # Log if additional media is being ignored
+                if num_media > 1:
+                    LOGGER.info(f"Ignoring {num_media-1} additional media items")
 
         if not sender:
              raise HTTPException(status_code=400, detail="Missing 'From' in request form")
 
-        agent_response = await self._process_message(sender, content, media_urls, media_content_types)
+        agent_response = await self._process_message(sender, content, media)
 
         twilio_resp = MessagingResponse()
         twilio_resp.message(agent_response)
 
         return str(twilio_resp)
 
-    async def _process_message(self, sender: str, content: str, media_urls: list = None, media_content_types: list = None) -> str:
+    async def _process_message(self, sender: str, content: str, media: dict = None) -> str:
         """
         Process the incoming message and generate a response using the agent.
 
         :param sender: The sender's identifier (e.g., WhatsApp number)
         :param content: The content of the message
-        :param media_urls: List of media URLs if present in the message
-        :param media_content_types: List of media content types if present in the message
+        :param media: Dictionary with image media data (url and content_type)
         :return: Response string from the agent
         """
         input_data = {
@@ -114,12 +129,9 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
         }
         
         # Add media information if available
-        if media_urls and len(media_urls) > 0:
-            input_data["media"] = [
-                {"url": url, "content_type": content_type} 
-                for url, content_type in zip(media_urls, media_content_types)
-            ]
+        if media:
+            input_data["media"] = media
             
-        print(input_data)
-        # Invoke the agent with the message content and any media attachments
+        LOGGER.debug(f"Sending to agent: {input_data}")
+        # Invoke the agent with the message content and image attachment
         return await self.agent.invoke(**input_data)
