@@ -19,12 +19,14 @@ class Agent:
             LOGGER.error(f"Failed to parse CONFIG as JSON: {e}")
             raise
 
-    async def invoke(self, id: str, user_message: str, media_urls: list = None, media_content_types: list = None) -> dict:
+    async def invoke(self, id: str, user_message: str, media: list = None) -> dict:
         """
         Process a user message through the LangGraph client.
         
         Args:
+            id: The unique identifier for the conversation
             user_message: The message content from the user
+            media: List of media files attached to the message
             
         Returns:
             dict: The result from the LangGraph run
@@ -32,6 +34,29 @@ class Agent:
         LOGGER.info(f"Invoking agent with thread_id: {id}, message: {user_message}")
 
         try:
+
+            message_content = []
+            
+
+            if user_message:
+                message_content.append({
+                    "type": "text",
+                    "text": user_message
+                })
+
+            if media and isinstance(media, list):
+                for item in media:
+                    if 'url' in item and 'content_type' in item:
+                        media_type = item['content_type'].split('/')[0]  # 'image', 'video', etc.
+                        message_content.append({
+                            "type": media_type,
+                            "source": {
+                                "type": "url",
+                                "url": item['url'],
+                                "media_type": item['content_type']
+                            }
+                        })
+            
             request_payload = {
                 "thread_id": str(uuid.uuid5(uuid.NAMESPACE_DNS, id)),
                 "assistant_id": config.ASSISTANT_ID,
@@ -39,7 +64,7 @@ class Agent:
                     "messages": [
                         {
                             "role": "user",
-                            "content": user_message,
+                            "content": message_content if message_content else user_message
                         }
                     ]
                 },
