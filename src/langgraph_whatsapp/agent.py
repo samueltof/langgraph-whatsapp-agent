@@ -47,15 +47,24 @@ class Agent:
             if media and isinstance(media, list):
                 for item in media:
                     if 'url' in item and 'content_type' in item:
-                        media_type = item['content_type'].split('/')[0]  # 'image', 'video', etc.
-                        message_content.append({
-                            "type": media_type,
-                            "source": {
-                                "type": "url",
-                                "url": item['url'],
-                                "media_type": item['content_type']
-                            }
-                        })
+                        if item['content_type'].startswith('image/'):
+                            message_content.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": item['url'],
+                                    "detail": "high"
+                                }
+                            })
+                        else:
+                            media_type = item['content_type'].split('/')[0]  # 'video', 'audio', etc.
+                            message_content.append({
+                                "type": "media",
+                                "media": {
+                                    "type": media_type,
+                                    "url": item['url'],
+                                    "media_type": item['content_type']
+                                }
+                            })
             
             request_payload = {
                 "thread_id": str(uuid.uuid5(uuid.NAMESPACE_DNS, id)),
