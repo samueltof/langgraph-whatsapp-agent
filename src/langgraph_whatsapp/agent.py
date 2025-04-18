@@ -19,19 +19,20 @@ class Agent:
             LOGGER.error(f"Failed to parse CONFIG as JSON: {e}")
             raise
 
-    async def invoke(self, id: str, user_message: str, media: dict = None) -> dict:
+    async def invoke(self, id: str, user_message: str, image: dict = None) -> dict:
         """
         Process a user message through the LangGraph client.
         
         Args:
             id: The unique identifier for the conversation
             user_message: The message content from the user
-            media: Dictionary with image media data (url and content_type)
+            image: Dictionary with image data structured as {"image_url": {"url": data_uri}}.
+                  The URL should be a data URI.
             
         Returns:
             dict: The result from the LangGraph run
         """
-        LOGGER.info(f"Invoking agent with thread_id: {id}, message: {user_message}")
+        print(f"Invoking agent with thread_id: {id}, message: {user_message}")
 
         try:
             message_content = []
@@ -42,20 +43,25 @@ class Agent:
                     "text": user_message
                 })
 
-            if media and isinstance(media, dict) and 'url' in media and 'content_type' in media:
-                if media['content_type'].startswith('image/'):
-                    # Process only images
-                    message_content.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": media['url'],
-                            "detail": "high"
-                        }
-                    })
-                    LOGGER.info(f"Added image: {media['url']}")
-                else:
-                    LOGGER.warning(f"Ignoring non-image media type: {media['content_type']}")
+            if image and isinstance(image, dict):
+                # Add the image content directly, assuming it's pre-formatted
+                message_content.append({
+                    "type": "image_url",
+                    "image_url": image["image_url"]
+                })
+                LOGGER.info(f"Added image data URI.")
             
+            # Ensure content is not empty; default to user_message if only image was sent
+            if not message_content and not user_message:
+                # Handle cases where maybe only an image is sent without text
+                # This might need specific handling depending on the graph requirements
+                # For now, we'll proceed, but the graph must handle empty user messages
+                LOGGER.warning("No text message provided, only image.")
+            
+            # If message_content is empty after processing, use user_message as fallback
+            # This covers the case where only text is sent, and no image
+            content_to_send = message_content if message_content else user_message
+
             request_payload = {
                 "thread_id": str(uuid.uuid5(uuid.NAMESPACE_DNS, id)),
                 "assistant_id": config.ASSISTANT_ID,
@@ -63,7 +69,7 @@ class Agent:
                     "messages": [
                         {
                             "role": "user",
-                            "content": message_content if message_content else user_message
+                            "content": content_to_send
                         }
                     ]
                 },

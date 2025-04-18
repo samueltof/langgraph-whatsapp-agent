@@ -2,11 +2,28 @@ from langgraph_whatsapp.agent import Agent
 from twilio.twiml.messaging_response import MessagingResponse
 from fastapi import Request, HTTPException
 from twilio.request_validator import RequestValidator
-from src.langgraph_whatsapp.config import TWILIO_AUTH_TOKEN
+from src.langgraph_whatsapp.config import TWILIO_AUTH_TOKEN, TWILIO_ACCOUNT_SID
 from abc import ABC, abstractmethod
 import logging
+import requests
+import base64
+import mimetypes
 
 LOGGER = logging.getLogger(__name__)
+
+
+def twilio_url_to_data_uri(url: str) -> str:
+    """Download the Twilio media and return a base‑64 data URI."""
+    sid = TWILIO_ACCOUNT_SID
+    token = TWILIO_AUTH_TOKEN
+    if not sid or not token:
+        raise RuntimeError("Twilio credentials are not configured")
+
+    res = requests.get(url, auth=(sid, token), timeout=15)
+    res.raise_for_status()
+    mime = mimetypes.guess_type(url)[0] or "image/jpeg"
+    data = base64.b64encode(res.content).decode()
+    return f"data:{mime};base64,{data}"
 
 class WhatsAppAgent(ABC):
     """
@@ -38,6 +55,8 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
     def __init__(self):
         if not TWILIO_AUTH_TOKEN:
             raise ValueError("TWILIO_AUTH_TOKEN is not configured or empty.")
+        if not TWILIO_ACCOUNT_SID:
+             raise ValueError("TWILIO_ACCOUNT_SID is not configured or empty.")
         self.agent = Agent()
         self.validator = RequestValidator(TWILIO_AUTH_TOKEN)
 
@@ -92,11 +111,19 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
             if media_url and media_content_type:
                 if media_content_type.startswith('image/'):
                     # Only process images
-                    media = {
-                        "url": media_url,
-                        "content_type": media_content_type
-                    }
-                    LOGGER.info(f"Found image: {media_url}")
+                    try:
+                        LOGGER.info(f"Found image: {media_url}. Converting to data URI...")
+                        data_uri = twilio_url_to_data_uri(media_url)
+                        media = {
+                            "url": media_url,
+                            "data_uri": data_uri,
+                            "content_type": media_content_type
+                        }
+                        LOGGER.info(f"Successfully converted image to data URI.")
+                    except Exception as e:
+                         LOGGER.error(f"Failed to download or convert image {media_url}: {e}")
+                         # Optionally decide if you want to proceed without media or raise error
+                         media = None # Set media to None if conversion fails
                 else:
                     LOGGER.warning(f"Ignoring non-image media type: {media_content_type}")
                 
@@ -120,7 +147,7 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
 
         :param sender: The sender's identifier (e.g., WhatsApp number)
         :param content: The content of the message
-        :param media: Dictionary with image media data (url and content_type)
+        :param media: Dictionary with image media data (url, data_uri, and content_type)
         :return: Response string from the agent
         """
         input_data = {
@@ -129,9 +156,11 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
         }
         
         # Add media information if available
-        if media:
-            input_data["media"] = media
+        if media and "data_uri" in media:
+            input_data["image"] = {
+                 "image_url": {"url": media["data_uri"]},
+            }
             
-        LOGGER.debug(f"Sending to agent: {input_data}")
+        print(f"Sending to agent: {input_data}")
         # Invoke the agent with the message content and image attachment
         return await self.agent.invoke(**input_data)
