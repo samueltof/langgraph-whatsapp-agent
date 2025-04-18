@@ -1,9 +1,41 @@
 from fastapi import FastAPI, Request, Response, HTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 from langgraph_whatsapp.channel import WhatsAppAgentTwilio
+from twilio.request_validator import RequestValidator
+from src.langgraph_whatsapp.config import TWILIO_AUTH_TOKEN
+from urllib.parse import parse_qs
 import logging
+
 
 APP = FastAPI()
 WSP_AGENT = WhatsAppAgentTwilio()
+
+class TwilioSignatureMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, path: str = "/whatsapp"):
+        super().__init__(app)
+        self.path = path
+        self.validator = RequestValidator(TWILIO_AUTH_TOKEN)
+
+    async def dispatch(self, request, call_next):
+        if request.url.path == self.path and request.method.upper() == "POST":
+            raw = await request.body()
+
+            # Validate the twilio signature
+            form_dict = {k: v[0] for k, v in parse_qs(raw.decode()).items()}
+            forwarded_proto = request.headers.get("x-forwarded-proto", "http")
+            forwarded_host  = request.headers.get("x-forwarded-host",
+                                                  request.headers.get("host"))
+            url = f"{forwarded_proto}://{forwarded_host}{request.url.path}"
+            sig = request.headers.get("X-Twilio-Signature", "")
+
+            if not self.validator.validate(url, form_dict, sig):
+                return Response(status_code=401, content="Invalid signature")
+
+            request._body = raw     # Starlette’s accepted rewind trick
+        return await call_next(request)
+
+
+APP.add_middleware(TwilioSignatureMiddleware, path="/whatsapp")
 
 @APP.post("/whatsapp")
 async def whatsapp_reply_twilio(request: Request):

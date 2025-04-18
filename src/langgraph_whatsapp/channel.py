@@ -1,7 +1,6 @@
 from langgraph_whatsapp.agent import Agent
 from twilio.twiml.messaging_response import MessagingResponse
 from fastapi import Request, HTTPException
-from twilio.request_validator import RequestValidator
 from src.langgraph_whatsapp.config import TWILIO_AUTH_TOKEN, TWILIO_ACCOUNT_SID
 from abc import ABC, abstractmethod
 import logging
@@ -58,29 +57,7 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
         if not TWILIO_ACCOUNT_SID:
              raise ValueError("TWILIO_ACCOUNT_SID is not configured or empty.")
         self.agent = Agent()
-        self.validator = RequestValidator(TWILIO_AUTH_TOKEN)
 
-    async def validate_request(self, request: Request) -> bool:
-        """
-        Validate the Twilio signature in the request.
-        
-        :param request: The incoming FastAPI request object
-        :return: True if validation succeeds, False otherwise
-        """
-        form_data = await request.form()
-        post_vars = dict(form_data)
-
-        # Construct the URL using the forwarded headers to match what Twilio expects
-        forwarded_proto = request.headers.get("x-forwarded-proto", "http")
-        forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", "localhost"))
-        url = f"{forwarded_proto}://{forwarded_host}{request.url.path}"
-        signature_header = request.headers.get("X-Twilio-Signature", "")
-
-        return self.validator.validate(
-            url,
-            post_vars,
-            signature_header
-        )
 
     async def handle_message(self, request: Request) -> str:
         """
@@ -89,9 +66,6 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
         :param request: The incoming FastAPI request object
         :return: Response containing TwiML XML or error
         """
-        # Validate the request
-        if not await self.validate_request(request):
-            raise HTTPException(status_code=403, detail="Twilio signature validation failed")
 
         form_data = await request.form()
         sender = form_data.get('From', "").strip() # e.g., 'whatsapp:+14155238886'
@@ -162,5 +136,5 @@ class WhatsAppAgentTwilio(WhatsAppAgent):
             }
             
         print(f"Sending to agent: {input_data}")
-        # Invoke the agent with the message content and image attachment
+
         return await self.agent.invoke(**input_data)
