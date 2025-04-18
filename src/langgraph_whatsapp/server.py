@@ -28,12 +28,14 @@ class TwilioSignatureMiddleware(BaseHTTPMiddleware):
 
             # ---- Signature check ------------------------------------
             form_dict = parse_qs(body.decode(), keep_blank_values=True)
+            # Flatten form_dict - take first value from each list
+            flat_form_dict = {k: v[0] if isinstance(v, list) and v else v for k, v in form_dict.items()}
             proto = request.headers.get("x-forwarded-proto", request.url.scheme)
             host  = request.headers.get("x-forwarded-host", request.headers.get("host"))
             url   = f"{proto}://{host}{request.url.path}"
             sig   = request.headers.get("X-Twilio-Signature", "")
 
-            if not self.validator.validate(url, form_dict, sig):
+            if not self.validator.validate(url, flat_form_dict, sig):
                 LOGGER.warning("Invalid Twilio signature for %s", url)
                 return Response(status_code=401, content="Invalid Twilio signature")
 
