@@ -40,16 +40,6 @@ class WhatsAppAgent(ABC):
         """
         pass
 
-    @abstractmethod
-    async def validate_request(self, request: Request) -> bool:
-        """
-        Validate the incoming request authenticity.
-        
-        :param request: The incoming request object
-        :return: True if request is valid, False otherwise
-        """
-        pass
-
 class WhatsAppAgentTwilio(WhatsAppAgent):
     def __init__(self):
         if not TWILIO_AUTH_TOKEN:
