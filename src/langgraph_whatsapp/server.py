@@ -15,7 +15,7 @@ APP = FastAPI()
 WSP_AGENT = WhatsAppAgentTwilio()
 
 
-class TwilioSignatureMiddleware(BaseHTTPMiddleware):
+class TwilioMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, path: str = "/whatsapp"):
         super().__init__(app)
         self.path = path
@@ -26,10 +26,10 @@ class TwilioSignatureMiddleware(BaseHTTPMiddleware):
         if request.url.path == self.path and request.method == "POST":
             body = await request.body()
 
-            # ---- Signature check ------------------------------------
+            # Signature check
             form_dict = parse_qs(body.decode(), keep_blank_values=True)
-            # Flatten form_dict - take first value from each list
             flat_form_dict = {k: v[0] if isinstance(v, list) and v else v for k, v in form_dict.items()}
+            
             proto = request.headers.get("x-forwarded-proto", request.url.scheme)
             host  = request.headers.get("x-forwarded-host", request.headers.get("host"))
             url   = f"{proto}://{host}{request.url.path}"
@@ -39,7 +39,7 @@ class TwilioSignatureMiddleware(BaseHTTPMiddleware):
                 LOGGER.warning("Invalid Twilio signature for %s", url)
                 return Response(status_code=401, content="Invalid Twilio signature")
 
-            # ---- Rewind: body *and* receive channel -----------------
+            # Rewind: body and receive channel
             async def _replay() -> Message:
                 return {"type": "http.request", "body": body, "more_body": False}
 
@@ -49,7 +49,7 @@ class TwilioSignatureMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-APP.add_middleware(TwilioSignatureMiddleware, path="/whatsapp")
+APP.add_middleware(TwilioMiddleware, path="/whatsapp")
 
 
 @APP.post("/whatsapp")
