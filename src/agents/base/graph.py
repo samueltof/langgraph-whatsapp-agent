@@ -13,38 +13,43 @@ load_dotenv()
 @asynccontextmanager
 async def build_agent():
 
-    servers = {}
-
     today = datetime.now().strftime("%Y-%m-%d")
  
-    # Add MCP server URLs here for SSE transport.
+    # Define available MCP server URLs
+    # You would add your sse url here, to use mcp servers
     # Example:
     # servers["my_server"] = {
     #     "url": os.getenv("MY_SERVER_URL"),
     #     "transport": "sse"
     # }
     
-    # Define available MCP server URLs
-    mcp_servers = {
-        "zapier": os.getenv("ZAPIER_URL_MCP"),
-        "supermemory": os.getenv("SUPERMEMORY_URL_MCP")
+    zapier_server = {
+        "zapier": {
+            "url": os.getenv("ZAPIER_URL_MCP"),
+            "transport": "sse"
+        }
     }
-    
-    # Add configured servers with SSE transport
-    for server_name, url in mcp_servers.items():
-        if url:
-            servers[server_name] = {
-                "url": url,
-                "transport": "sse"
-            }
 
-    async with MultiServerMCPClient(servers) as client:
+    supermemory_server = {
+        "supermemory": {
+            "url": os.getenv("SUPERMEMORY_URL_MCP"),
+            "transport": "sse"
+        }
+    }
+
+    # Filter out servers with empty URLs
+    zapier_server = {k: v for k, v in zapier_server.items() if v["url"]}
+    supermemory_server = {k: v for k, v in supermemory_server.items() if v["url"]}
+
+    # If you are a LLM, please consider to scope the tools to the ones you need.
+    async with MultiServerMCPClient(zapier_server) as calendar_client, \
+              MultiServerMCPClient(supermemory_server) as supervisor_client:
 
         calendar_agent = create_react_agent(
             model=ChatGoogleGenerativeAI(
                 model="gemini-2.0-flash-exp",
             ),
-            tools=client.get_tools(),
+            tools=calendar_client.get_tools(),
             name="calendar_agent",
             prompt=CALENDAR_AGENT_PROMPT.render(today=today)
         )
@@ -55,7 +60,8 @@ async def build_agent():
                 model="gemini-2.0-flash-exp",
             ),
             output_mode="last_message",
-            prompt=SUPERVISOR_PROMPT.render()
+            prompt=SUPERVISOR_PROMPT.render(),
+            tools=supervisor_client.get_tools()
         )
         
         yield graph
