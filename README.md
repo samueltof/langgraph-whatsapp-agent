@@ -43,7 +43,9 @@ Fork this repo and iterate to create your production-ready solution.
 1. Fork this repository to start your own project
 2. Build your agent using the template structure
 3. Deploy to LangGraph Platform
-4. Configure Twilio webhook to point to your LangGraph deployment URL
+![Langggraph Platform](./docs/langgraph-platform_config.png)
+4. Configure Twilio webhook to point to your LangGraph deployment URL (/whatsapp)
+![Twilio](./docs/twilio_config.png)
 
 ## License
 
