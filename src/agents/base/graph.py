@@ -17,12 +17,26 @@ async def build_agent():
 
     today = datetime.now().strftime("%Y-%m-%d")
  
-    zapi_url = os.getenv("ZAPIER_URL_MCP")
-    if zapi_url:
-        servers["zapi"] = {
-            "url": zapi_url,
-            "transport": "sse",
-        }
+    # Add MCP server URLs here for SSE transport.
+    # Example:
+    # servers["my_server"] = {
+    #     "url": os.getenv("MY_SERVER_URL"),
+    #     "transport": "sse"
+    # }
+    
+    # Define available MCP server URLs
+    mcp_servers = {
+        "zapier": os.getenv("ZAPIER_URL_MCP"),
+        "supermemory": os.getenv("SUPERMEMORY_URL_MCP")
+    }
+    
+    # Add configured servers with SSE transport
+    for server_name, url in mcp_servers.items():
+        if url:
+            servers[server_name] = {
+                "url": url,
+                "transport": "sse"
+            }
 
     async with MultiServerMCPClient(servers) as client:
 
