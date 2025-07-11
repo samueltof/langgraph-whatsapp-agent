@@ -38,14 +38,91 @@ Fork this repo and iterate to create your production-ready solution.
 - LangGraph Platform access
 - (Optional) MCP server configurations
 
+## Setup Instructions
+
+### 1. Environment Configuration
+
+1. Copy the environment template:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Fill in the required environment variables in `.env`:
+
+   **Required Variables:**
+   - `GOOGLE_API_KEY`: Get from [Google AI Studio](https://aistudio.google.com/)
+   - `TWILIO_AUTH_TOKEN` & `TWILIO_ACCOUNT_SID`: From your [Twilio Console](https://console.twilio.com/)
+   - `LANGGRAPH_URL`: Your LangGraph Platform deployment URL
+   - `LANGGRAPH_ASSISTANT_ID`: Assistant ID from LangGraph Platform (defaults to "agent")
+
+   **Optional Variables:**
+   - `ZAPIER_URL_MCP` & `SUPERMEMORY_URL_MCP`: MCP server URLs if using external tools
+   - `LANGSMITH_API_KEY`: For observability via [LangSmith](https://smith.langchain.com/)
+
+### 2. Install Dependencies
+
+Using uv (recommended):
+```bash
+uv install
+```
+
+Or using pip:
+```bash
+pip install -e .
+```
+
+### 3. Local Development
+
+Test the server locally:
+```bash
+uvicorn src.langgraph_whatsapp.server:APP --host 0.0.0.0 --port 8081 --reload
+```
+
+### 4. Deploy to LangGraph Platform
+
+1. Configure your `langgraph.json` deployment settings
+2. Deploy using the LangGraph CLI:
+   ```bash
+   langgraph deploy
+   ```
+3. Note your deployment URL for Twilio webhook configuration
+
+![LangGraph Platform](./docs/langgraph-platform_config.png)
+
+### 5. Configure Twilio Webhook
+
+1. Go to your Twilio Console > WhatsApp > Sandbox settings
+2. Set the webhook URL to: `https://your-deployment-url.com/whatsapp`
+3. Set the HTTP method to `POST`
+
+![Twilio Configuration](./docs/twilio_config.png)
+
+## Customization
+
+### Adding New Agents
+
+1. Create a new agent in `src/agents/`
+2. Update `src/agents/base/graph.py` to include your agent
+3. Modify prompts in `src/agents/base/prompt.py`
+
+### Adding MCP Servers
+
+1. Add your MCP server URL to the environment variables
+2. Update the server configuration in `src/agents/base/graph.py`
+
+### Modifying Agent Behavior
+
+- Edit prompts in `src/agents/base/prompt.py`
+- Update agent logic in `src/agents/base/graph.py`
+- Customize the supervisor prompt for different orchestration strategies
+
 ## Getting Started
 
 1. Fork this repository to start your own project
-2. Build your agent using the template structure
-3. Deploy to LangGraph Platform
-![Langggraph Platform](./docs/langgraph-platform_config.png)
-4. Configure Twilio webhook to point to your LangGraph deployment URL (/whatsapp)
-![Twilio](./docs/twilio_config.png)
+2. Follow the setup instructions above
+3. Customize the agents for your use case
+4. Deploy to LangGraph Platform
+5. Configure Twilio webhook to point to your deployment
 
 ## License
 
