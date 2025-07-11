@@ -1,7 +1,6 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
-from contextlib import asynccontextmanager
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from agents.base.prompt import CALENDAR_AGENT_PROMPT, SUPERVISOR_PROMPT
 from datetime import datetime
@@ -10,58 +9,65 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-@asynccontextmanager
 async def build_agent():
-
+    """
+    Build the agent graph using the official MCP adapter pattern for LangGraph API Server.
+    Following: https://github.com/langchain-ai/langchain-mcp-adapters
+    """
     today = datetime.now().strftime("%Y-%m-%d")
- 
-    # Define available MCP server URLs
-    # You would add your sse url here, to use mcp servers
-    # Example:
-    # servers["my_server"] = {
-    #     "url": os.getenv("MY_SERVER_URL"),
-    #     "transport": "sse"
-    # }
     
-    zapier_server = {
-        "zapier": {
-            "url": os.getenv("ZAPIER_URL_MCP"),
+    # Configure all MCP servers in a single dictionary (official pattern)
+    mcp_servers = {}
+    
+    # Add Zapier server if URL is provided
+    zapier_url = os.getenv("ZAPIER_URL_MCP")
+    if zapier_url:
+        mcp_servers["zapier"] = {
+            "url": zapier_url,
             "transport": "sse"
         }
-    }
-
-    supermemory_server = {
-        "supermemory": {
-            "url": os.getenv("SUPERMEMORY_URL_MCP"),
+    
+    # Add Supermemory server if URL is provided  
+    supermemory_url = os.getenv("SUPERMEMORY_URL_MCP")
+    if supermemory_url:
+        mcp_servers["supermemory"] = {
+            "url": supermemory_url,
             "transport": "sse"
         }
-    }
-
-    # Filter out servers with empty URLs
-    zapier_server = {k: v for k, v in zapier_server.items() if v["url"]}
-    supermemory_server = {k: v for k, v in supermemory_server.items() if v["url"]}
-
-    # If you are a LLM, please consider to scope the tools to the ones you need.
-    async with MultiServerMCPClient(zapier_server) as calendar_client, \
-              MultiServerMCPClient(supermemory_server) as supervisor_client:
-
-        calendar_agent = create_react_agent(
-            model=ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash-exp",
-            ),
-            tools=calendar_client.get_tools(),
-            name="calendar_agent",
-            prompt=CALENDAR_AGENT_PROMPT.render(today=today)
-        )
-
-        graph = create_supervisor(
-            [calendar_agent],
-            model=ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash-exp",
-            ),
-            output_mode="last_message",
-            prompt=SUPERVISOR_PROMPT.render(),
-            tools=supervisor_client.get_tools()
-        )
-        
-        yield graph
+    
+    # Get tools from MCP servers using the official pattern
+    tools = []
+    if mcp_servers:
+        try:
+            # Single client for all servers (official recommended approach)
+            client = MultiServerMCPClient(mcp_servers)
+            tools = await client.get_tools()
+            print(f"✅ Loaded {len(tools)} MCP tools from {list(mcp_servers.keys())}")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not load MCP tools: {e}")
+            print("Continuing without MCP tools...")
+    else:
+        print("ℹ️ No MCP server URLs configured, running without external tools")
+    
+    # Create calendar agent with available tools
+    calendar_agent = create_react_agent(
+        model=ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash-exp",
+        ),
+        tools=tools,  # All tools available to calendar agent
+        name="calendar_agent",
+        prompt=CALENDAR_AGENT_PROMPT.render(today=today)
+    )
+    
+    # Create supervisor with same tools
+    graph = create_supervisor(
+        [calendar_agent],
+        model=ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash-exp",
+        ),
+        output_mode="last_message",
+        prompt=SUPERVISOR_PROMPT.render(),
+        tools=tools  # Supervisor has access to all tools too
+    )
+    
+    return graph
