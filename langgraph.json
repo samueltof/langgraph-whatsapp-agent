@@ -1,7 +1,7 @@
 {
     "dependencies": ["."],
     "graphs": {
-      "agent": "./src/agents/base/graph.py:build_agent"
+      "agent": "./src/agents/base/graph_simple.py:build_agent"
     },
     "http": {
       "app": "./src/langgraph_whatsapp/server.py:APP"
