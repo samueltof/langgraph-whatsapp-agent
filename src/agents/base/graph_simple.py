@@ -1,7 +1,7 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.prebuilt import create_react_agent
-from langgraph_supervisor import create_supervisor
-from agents.base.prompt import CALENDAR_AGENT_PROMPT, SUPERVISOR_PROMPT
+from langgraph.graph import StateGraph, MessagesState
+from langgraph.prebuilt import ToolNode
+from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -10,32 +10,27 @@ load_dotenv()
 
 async def build_agent():
     """
-    Simple agent build without MCP dependencies for basic testing.
+    Ultra-simple agent build without external dependencies for basic testing.
     """
-    today = datetime.now().strftime("%Y-%m-%d")
+    print("ℹ️ Building ultra-simple agent for basic testing...")
     
-    print("ℹ️ Building simple agent without MCP tools for basic testing...")
-    
-    # Create calendar agent without external tools
-    calendar_agent = create_react_agent(
-        model=ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
-        ),
-        tools=[],  # No external tools - just basic LLM functionality
-        name="calendar_agent",
-        prompt=CALENDAR_AGENT_PROMPT.render(today=today)
+    # Create the model
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash-exp",
+        temperature=0.7
     )
     
-    # Create supervisor without external tools
-    graph = create_supervisor(
-        [calendar_agent],
-        model=ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
-        ),
-        output_mode="last_message",
-        prompt=SUPERVISOR_PROMPT.render(),
-        tools=[]  # No external tools
-    )
+    # Define the chatbot function
+    def chatbot(state: MessagesState):
+        return {"messages": [model.invoke(state["messages"])]}
     
-    print("✅ Simple agent built successfully - ready for basic conversations!")
+    # Create a simple graph
+    graph_builder = StateGraph(MessagesState)
+    graph_builder.add_node("chatbot", chatbot)
+    graph_builder.set_entry_point("chatbot")
+    graph_builder.set_finish_point("chatbot")
+    
+    graph = graph_builder.compile()
+    
+    print("✅ Ultra-simple agent built successfully - ready for basic conversations!")
     return graph 
